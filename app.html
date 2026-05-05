@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JackTracker - Personal Wellness App</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0a0a0f;
+            color: #e8eaf0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // ── Colors ──
+        const C = {
+            bg: '#0a0a0f',
+            surface: '#12121a',
+            card: '#1a1a26',
+            border: 'rgba(99,180,255,0.15)',
+            accent: '#4a9eff',
+            accentGlow: 'rgba(74,158,255,0.3)',
+            hot: '#ff6b6b',
+            hotGlow: 'rgba(255,107,107,0.3)',
+            gold: '#ffd166',
+            green: '#06d6a0',
+            text: '#e8eaf0',
+            muted: 'rgba(232,234,240,0.4)',
+            dim: 'rgba(232,234,240,0.2)',
+        };
+
+        // ── Storage ──
+        let db = {
+            user: null,
+            sessions: [],
+        };
+
+        function loadDB() {
+            try {
+                const stored = localStorage.getItem('jacktracker_db');
+                if (stored) db = JSON.parse(stored);
+            } catch (e) {
+                console.log('Using in-memory storage');
+            }
+        }
+
+        function saveDB() {
+            try {
+                localStorage.setItem('jacktracker_db', JSON.stringify(db));
+            } catch (e) {
+                console.log('Could not save to localStorage');
+            }
+        }
+
+        loadDB();
+
+        // ── Utility Functions ──
+        function formatDuration(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            if (h > 0) return `${h}h ${m}m ${s}s`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
+        }
+
+        function formatDate(iso) {
+            const d = new Date(iso);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function formatTime(iso) {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function getCleverStats(sessions) {
+            const stats = {};
+            
+            sessions.forEach(s => {
+                const date = new Date(s.date);
+                const dateStr = date.toDateString();
+                if (!stats[dateStr]) stats[dateStr] = 0;
+                stats[dateStr]++;
+            });
+
+            return {
+                totalSessions: sessions.length,
+                totalStrokes: sessions.reduce((a, s) => a + s.strokes, 0),
+                totalDuration: sessions.reduce((a, s) => a + s.duration, 0),
+                avgStrokes: sessions.length ? Math.round(sessions.reduce((a, s) => a + s.strokes, 0) / sessions.length) : 0,
+                avgDuration: sessions.length ? Math.round(sessions.reduce((a, s) => a + s.duration, 0) / sessions.length) : 0,
+                peakRate: Math.max(...sessions.map(s => s.spm || 0), 0),
+                longestSession: Math.max(...sessions.map(s => s.duration || 0), 0),
+                mostStrokes: Math.max(...sessions.map(s => s.strokes || 0), 0),
+                sessionsPerDay: Math.max(...Object.values(stats), 0),
+                topPartner: getMostCommon(sessions.map(s => s.partner).filter(Boolean)) || 'Solo',
+                topLocation: getMostCommon(sessions.map(s => s.location).filter(Boolean)) || 'Home',
+                topRating: sessions.length ? Math.round(sessions.reduce((a, s) => a + (s.rating || 0), 0) / sessions.length) : 0,
+                topAttractiveness: sessions.length ? Math.round(sessions.reduce((a, s) => a + (s.attractiveness || 0), 0) / sessions.length) : 0,
+            };
+        }
+
+        function getMostCommon(arr) {
+            if (!arr.length) return null;
+            const counts = {};
+            arr.forEach(item => {
+                counts[item] = (counts[item] || 0) + 1;
+            });
+            return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+        }
+
+        // ── LOGIN SCREEN ──
+        function LoginScreen({ onLogin }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            function handleLogin(e) {
+                e.preventDefault();
+                if (!username.trim()) {
+                    setError('Please enter a username');
+                    return;
+                }
+                if (!password.trim()) {
+                    setError('Please enter a password');
+                    return;
+                }
+                db.user = { username, createdAt: new Date().toISOString() };
+                saveDB();
+                onLogin();
+            }
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: `linear-gradient(135deg, ${C.bg}, ${C.surface})`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px',
+                }}>
+                    <div style={{
+                        background: C.card,
+                        border: `1px solid ${C.border}`,
+                        borderRadius: '16px',
+                        padding: '40px',
+                        maxWidth: '400px',
+                        width: '100%',
+                        boxShadow: `0 0 60px ${C.accentGlow}`,
+                    }}>
+                        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                            <div style={{ fontSize: '64px', marginBottom: '20px' }}>🍆</div>
+                            <h1 style={{
+                                fontSize: '32px',
+                                fontWeight: 700,
+                                color: C.accent,
+                                textShadow: `0 0 20px ${C.accentGlow}`,
+                                marginBottom: '10px',
+                            }}>
+                                JackTracker
+                            </h1>
+                            <p style={{ color: C.muted, fontSize: '14px' }}>
+                                Personal Sexual Wellness Tracker
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleLogin}>
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: C.muted }}>
+                                    Username
+                                </label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    placeholder="Enter username"
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '8px',
+                                        color: C.text,
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: C.muted }}>
+                                    Password
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Enter password"
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '8px',
+                                        color: C.text,
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </div>
+
+                            {error && (
+                                <div style={{
+                                    padding: '12px',
+                                    background: `rgba(255, 107, 107, 0.1)`,
+                                    border: `1px solid ${C.hot}`,
+                                    borderRadius: '8px',
+                                    color: C.hot,
+                                    fontSize: '13px',
+                                    marginBottom: '20px',
+                                }}>
+                                    ⚠️ {error}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                style={{
+                                    width: '100%',
+                                    padding: '14px',
+                                    background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
+                                    border: `1px solid ${C.accent}`,
+                                    borderRadius: '8px',
+                                    color: 'white',
+                                    fontSize: '16px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    boxShadow: `0 0 20px ${C.accentGlow}`,
+                                }}
+                            >
+                                Login
+                            </button>
+                        </form>
+
+                        <p style={{
+                            textAlign: 'center',
+                            fontSize: '12px',
+                            color: C.muted,
+                            marginTop: '20px',
+                        }}>
+                            ✓ All data stored locally on your device
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── SESSION VIEW ──
+        function SessionView({ onFinish, onCancel }) {
+            const [strokes, setStrokes] = useState(0);
+            const [running, setRunning] = useState(false);
+            const [elapsed, setElapsed] = useState(0);
+            const [peakRate, setPeakRate] = useState(0);
+            
+            // Session metadata
+            const [partner, setPartner] = useState('Solo');
+            const [location, setLocation] = useState('Home');
+            const [content, setContent] = useState('');
+            const [toys, setToys] = useState('');
+            const [age, setAge] = useState('');
+            const [rating, setRating] = useState(5);
+            const [attractiveness, setAttractiveness] = useState(5);
+            const [notes, setNotes] = useState('');
+            const [showDetails, setShowDetails] = useState(false);
+
+            const lastAccel = useRef({ y: 0 });
+            const strokeCooldown = useRef(false);
+            const timerRef = useRef(null);
+            const recentStrokes = useRef([]);
+
+            // Timer
+            useEffect(() => {
+                if (running) {
+                    timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [running]);
+
+            // Motion detection
+            useEffect(() => {
+                if (!running) return;
+
+                function handleMotion(e) {
+                    const acc = e.accelerationIncludingGravity;
+                    if (!acc) return;
+                    const y = acc.y || 0;
+                    const delta = Math.abs(y - lastAccel.current.y);
+                    lastAccel.current.y = y;
+
+                    if (delta > 6 && !strokeCooldown.current) {
+                        strokeCooldown.current = true;
+                        setStrokes(s => {
+                            const next = s + 1;
+                            const now = Date.now();
+                            recentStrokes.current = [...recentStrokes.current.filter(t => now - t < 10000), now];
+                            const spm = (recentStrokes.current.length / 10) * 60;
+                            setPeakRate(p => Math.max(p, Math.round(spm)));
+                            return next;
+                        });
+                        setTimeout(() => { strokeCooldown.current = false; }, 200);
+                    }
+                }
+
+                window.addEventListener('devicemotion', handleMotion);
+                return () => window.removeEventListener('devicemotion', handleMotion);
+            }, [running]);
+
+            function manualStroke() {
+                if (!running) return;
+                setStrokes(s => s + 1);
+            }
+
+            function handleStart() {
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission().then(r => {
+                        if (r === 'granted') setRunning(true);
+                    }).catch(() => setRunning(true));
+                } else {
+                    setRunning(true);
+                }
+            }
+
+            function handleFinish() {
+                setRunning(false);
+                const spm = elapsed > 0 ? Math.round((strokes / elapsed) * 60) : 0;
+                onFinish({
+                    id: Date.now(),
+                    date: new Date().toISOString(),
+                    strokes,
+                    duration: elapsed,
+                    spm,
+                    peakRate,
+                    partner,
+                    location,
+                    content,
+                    toys,
+                    age,
+                    rating,
+                    attractiveness,
+                    notes,
+                });
+            }
+
+            const spm = elapsed > 0 ? Math.round((strokes / elapsed) * 60) : 0;
+            const progress = Math.min((strokes / 200) * 100, 100);
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: C.bg,
+                    color: C.text,
+                    padding: '32px 24px 40px',
+                    maxWidth: '440px',
+                    margin: '0 auto',
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+                        <button onClick={onCancel} style={{
+                            background: 'none',
+                            border: 'none',
+                            color: C.muted,
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                        }}>
+                            ← Cancel
+                        </button>
+                        <div style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700 }}>
+                            {formatDuration(elapsed)}
+                        </div>
+                    </div>
+
+                    {/* Stroke Counter */}
+                    <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                        <div style={{ fontSize: '11px', fontFamily: 'monospace', color: C.muted, marginBottom: '8px', textTransform: 'uppercase' }}>
+                            Strokes
+                        </div>
+                        <div style={{
+                            fontSize: 'clamp(80px,22vw,120px)',
+                            fontWeight: 700,
+                            color: running ? C.hot : C.accent,
+                            textShadow: `0 0 60px ${running ? C.hotGlow : C.accentGlow}`,
+                        }}>
+                            {strokes}
+                        </div>
+                        <div style={{ fontSize: '14px', color: C.muted, marginTop: '8px' }}>
+                            {running ? `${spm} strokes/min` : 'Ready when you are'}
+                        </div>
+                    </div>
+
+                    {/* Progress */}
+                    <div style={{
+                        height: '6px',
+                        background: 'rgba(255,255,255,0.05)',
+                        borderRadius: '3px',
+                        marginBottom: '32px',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${progress}%`,
+                            background: `linear-gradient(90deg, ${C.accent}, ${C.hot})`,
+                            borderRadius: '3px',
+                            transition: 'width 0.3s',
+                        }} />
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '32px' }}>
+                        {[
+                            { label: 'Peak SPM', val: peakRate || '—' },
+                            { label: 'Duration', val: formatDuration(elapsed) },
+                            { label: 'Current SPM', val: spm || '—' },
+                        ].map(({ label, val }) => (
+                            <div key={label} style={{
+                                background: C.card,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: '8px',
+                                padding: '12px 8px',
+                                textAlign: 'center',
+                            }}>
+                                <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold }}>{val}</div>
+                                <div style={{ fontSize: '9px', color: C.muted, marginTop: '3px', textTransform: 'uppercase' }}>
+                                    {label}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Details Toggle */}
+                    <button onClick={() => setShowDetails(!showDetails)} style={{
+                        width: '100%',
+                        background: 'transparent',
+                        border: `1px solid ${C.border}`,
+                        borderRadius: '8px',
+                        color: C.muted,
+                        fontSize: '13px',
+                        padding: '10px',
+                        cursor: 'pointer',
+                        marginBottom: '20px',
+                    }}>
+                        {showDetails ? '▼' : '▶'} Session Details
+                    </button>
+
+                    {showDetails && (
+                        <div style={{ marginBottom: '20px', padding: '16px', background: C.card, borderRadius: '8px', border: `1px solid ${C.border}` }}>
+                            {/* Partner */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Partner Type
+                                </label>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {['Solo', 'Partner', 'Group'].map(p => (
+                                        <button key={p} onClick={() => setPartner(p)} style={{
+                                            padding: '6px 12px',
+                                            background: partner === p ? C.accent : 'transparent',
+                                            border: `1px solid ${partner === p ? C.accent : C.border}`,
+                                            borderRadius: '20px',
+                                            color: partner === p ? '#000' : C.muted,
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                        }}>
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Location */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Location
+                                </label>
+                                <input
+                                    type="text"
+                                    value={location}
+                                    onChange={(e) => setLocation(e.target.value)}
+                                    placeholder="e.g., Home, Work, Airplane..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '6px',
+                                        color: C.text,
+                                        fontSize: '12px',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </div>
+
+                            {/* Content/Website */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Content/Website (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={content}
+                                    onChange={(e) => setContent(e.target.value)}
+                                    placeholder="Keep it discreet..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '6px',
+                                        color: C.text,
+                                        fontSize: '12px',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </div>
+
+                            {/* Toys */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Toys Used (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={toys}
+                                    onChange={(e) => setToys(e.target.value)}
+                                    placeholder="e.g., Fleshlight, Dildo..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '6px',
+                                        color: C.text,
+                                        fontSize: '12px',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </div>
+
+                            {/* Age */}
+                            {partner !== 'Solo' && (
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                        Partner Age (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={age}
+                                        onChange={(e) => setAge(e.target.value)}
+                                        placeholder="e.g., 25, 18-25..."
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px',
+                                            background: C.surface,
+                                            border: `1px solid ${C.border}`,
+                                            borderRadius: '6px',
+                                            color: C.text,
+                                            fontSize: '12px',
+                                            outline: 'none',
+                                        }}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Rating */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Experience Rating: {rating}/10
+                                </label>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={rating}
+                                    onChange={(e) => setRating(parseInt(e.target.value))}
+                                    style={{ width: '100%' }}
+                                />
+                            </div>
+
+                            {/* Attractiveness */}
+                            {partner !== 'Solo' && (
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                        Attractiveness Rating: {attractiveness}/10
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="10"
+                                        value={attractiveness}
+                                        onChange={(e) => setAttractiveness(parseInt(e.target.value))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Notes */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '12px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    Notes
+                                </label>
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    placeholder="Any additional notes..."
+                                    style={{
+                                        width: '100%',
+                                        minHeight: '60px',
+                                        padding: '8px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '6px',
+                                        color: C.text,
+                                        fontSize: '12px',
+                                        outline: 'none',
+                                        resize: 'vertical',
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Controls */}
+                    {!running ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <button onClick={handleStart} style={{
+                                width: '100%',
+                                padding: '20px',
+                                background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
+                                border: `1px solid ${C.accent}`,
+                                borderRadius: '12px',
+                                color: 'white',
+                                fontSize: '18px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                boxShadow: `0 0 30px ${C.accentGlow}`,
+                            }}>
+                                {elapsed > 0 ? '▶ Resume' : '▶ Start Tracking'}
+                            </button>
+                            {elapsed > 0 && (
+                                <button onClick={handleFinish} style={{
+                                    width: '100%',
+                                    padding: '16px',
+                                    background: `linear-gradient(135deg, #6a1a1a, ${C.hot})`,
+                                    border: `1px solid ${C.hot}`,
+                                    borderRadius: '12px',
+                                    color: 'white',
+                                    fontSize: '16px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                }}>
+                                    ✓ Finish Session
+                                </button>
+                            )}
+                            <button onClick={manualStroke} style={{
+                                width: '100%',
+                                padding: '12px',
+                                background: 'transparent',
+                                border: `1px dashed ${C.dim}`,
+                                borderRadius: '8px',
+                                color: C.dim,
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                            }}>
+                                TAP TO SIMULATE (desktop testing)
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <button onClick={() => setRunning(false)} style={{
+                                width: '100%',
+                                padding: '20px',
+                                background: 'rgba(255,166,0,0.15)',
+                                border: '1px solid rgba(255,166,0,0.4)',
+                                borderRadius: '12px',
+                                color: '#ffa600',
+                                fontSize: '16px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                            }}>
+                                ⏸ Pause
+                            </button>
+                            <button onClick={handleFinish} style={{
+                                width: '100%',
+                                padding: '16px',
+                                background: `linear-gradient(135deg, #6a1a1a, ${C.hot})`,
+                                border: `1px solid ${C.hot}`,
+                                borderRadius: '12px',
+                                color: 'white',
+                                fontSize: '16px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                            }}>
+                                ✓ Finish Session
+                            </button>
+                            <button onClick={manualStroke} style={{
+                                width: '100%',
+                                padding: '12px',
+                                background: 'transparent',
+                                border: `1px dashed ${C.dim}`,
+                                borderRadius: '8px',
+                                color: C.dim,
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                            }}>
+                                TAP TO SIMULATE (desktop testing)
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── SUMMARY VIEW ──
+        function SummaryView({ session, onHome }) {
+            const { strokes, duration, spm, peakRate, partner, location, content, toys, age, rating, attractiveness, notes, date } = session;
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: C.bg,
+                    color: C.text,
+                    padding: '48px 24px 60px',
+                    maxWidth: '440px',
+                    margin: '0 auto',
+                }}>
+                    <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                        <div style={{ fontSize: '11px', fontFamily: 'monospace', color: C.green, marginBottom: '12px', textTransform: 'uppercase' }}>
+                            Session Complete
+                        </div>
+                        <div style={{
+                            fontSize: 'clamp(60px,16vw,90px)',
+                            fontWeight: 700,
+                            color: C.hot,
+                            textShadow: `0 0 50px ${C.hotGlow}`,
+                            lineHeight: 1,
+                            marginBottom: '8px',
+                        }}>
+                            {strokes}
+                        </div>
+                        <div style={{ fontSize: '16px', color: C.muted, fontStyle: 'italic' }}>total strokes</div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '28px' }}>
+                        {[
+                            { label: 'Duration', val: formatDuration(duration), color: C.accent },
+                            { label: 'Avg Rate', val: `${spm}/min`, color: C.accent },
+                            { label: 'Peak Rate', val: `${peakRate}/min`, color: C.gold },
+                            { label: 'Rating', val: `${rating}/10`, color: C.green },
+                            { label: 'Partner Type', val: partner, color: C.text },
+                            { label: 'Location', val: location, color: C.text },
+                        ].map(({ label, val, color }) => (
+                            <div key={label} style={{
+                                background: C.card,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: '10px',
+                                padding: '16px',
+                            }}>
+                                <div style={{ fontSize: '10px', color: C.muted, marginBottom: '6px', textTransform: 'uppercase' }}>
+                                    {label}
+                                </div>
+                                <div style={{ fontSize: '22px', fontWeight: 700, color }}>{val}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Session Details */}
+                    {(content || toys || (partner !== 'Solo' && attractiveness) || notes) && (
+                        <div style={{
+                            background: C.card,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: '10px',
+                            padding: '18px',
+                            marginBottom: '20px',
+                        }}>
+                            {content && (
+                                <div style={{ marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '10px', color: C.muted, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                        Content
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: C.text }}>{content}</div>
+                                </div>
+                            )}
+                            {toys && (
+                                <div style={{ marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '10px', color: C.muted, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                        Toys Used
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: C.text }}>{toys}</div>
+                                </div>
+                            )}
+                            {partner !== 'Solo' && age && (
+                                <div style={{ marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '10px', color: C.muted, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                        Partner Age
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: C.text }}>{age}</div>
+                                </div>
+                            )}
+                            {partner !== 'Solo' && (
+                                <div style={{ marginBottom: '12px' }}>
+                                    <div style={{ fontSize: '10px', color: C.muted, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                        Attractiveness
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: C.text }}>{attractiveness}/10</div>
+                                </div>
+                            )}
+                            {notes && (
+                                <div>
+                                    <div style={{ fontSize: '10px', color: C.muted, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                        Notes
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: C.muted, fontStyle: 'italic' }}>"{notes}"</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <button onClick={onHome} style={{
+                            width: '100%',
+                            padding: '16px',
+                            background: `linear-gradient(135deg, #1a3a6a, ${C.accent})`,
+                            border: `1px solid ${C.accent}`,
+                            borderRadius: '12px',
+                            color: 'white',
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                        }}>
+                            View Dashboard
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── HOME/DASHBOARD ──
+        function HomeView({ sessions, onStart, onViewHistory, onRefresh }) {
+            const stats = getCleverStats(sessions);
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: C.bg,
+                    color: C.text,
+                    padding: '0 0 40px',
+                }}>
+                    {/* Header */}
+                    <div style={{
+                        padding: '48px 24px 0',
+                        textAlign: 'center',
+                        background: `linear-gradient(135deg, rgba(74,158,255,0.1), rgba(118,75,162,0.1))`,
+                        paddingBottom: '40px',
+                    }}>
+                        <div style={{ fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.4em', color: C.accent, textTransform: 'uppercase', marginBottom: 12 }}>
+                            Sexual Wellness
+                        </div>
+                        <div style={{
+                            fontSize: 'clamp(36px,10vw,64px)',
+                            fontWeight: 700,
+                            color: C.accent,
+                            textShadow: `0 0 40px ${C.accentGlow}`,
+                            letterSpacing: '0.05em',
+                            marginBottom: 6,
+                        }}>
+                            JackTracker
+                        </div>
+                        <div style={{ fontStyle: 'italic', fontSize: 15, color: C.muted, marginBottom: 40 }}>
+                            Motion-sensing stroke tracker & wellness monitor
+                        </div>
+
+                        {/* Main Stats */}
+                        {sessions.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px', padding: '0 24px' }}>
+                                <StatCard label="Total Sessions" value={stats.totalSessions} icon="📊" />
+                                <StatCard label="Total Strokes" value={stats.totalStrokes} icon="🍆" />
+                                <StatCard label="Avg Strokes" value={stats.avgStrokes} icon="📈" />
+                                <StatCard label="Peak SPM" value={stats.peakRate} icon="⚡" />
+                                <StatCard label="Avg Rating" value={`${stats.topRating}/10`} icon="⭐" />
+                                <StatCard label="Total Hours" value={Math.floor(stats.totalDuration / 3600)} icon="⏱️" />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Clever Stats Grid */}
+                    {sessions.length > 0 && (
+                        <div style={{ padding: '0 24px', maxWidth: 800, margin: '0 auto', marginBottom: 40 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: C.accent }}>📊 Your Stats</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                                <NerdStat label="Sessions Per Day (Max)" value={stats.sessionsPerDay} unit="times" icon="🔢" />
+                                <NerdStat label="Most Common Partner" value={stats.topPartner} icon="👥" />
+                                <NerdStat label="Favorite Location" value={stats.topLocation} icon="📍" />
+                                <NerdStat label="Avg Attractiveness" value={`${stats.topAttractiveness}/10`} icon="😍" />
+                                <NerdStat label="Longest Session" value={formatDuration(stats.longestSession)} icon="🏁" />
+                                <NerdStat label="Personal Best" value={stats.mostStrokes} unit="strokes" icon="🏆" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Buttons */}
+                    <div style={{ padding: '0 24px', maxWidth: 400, margin: '0 auto' }}>
+                        <button onClick={onStart} style={{
+                            width: '100%',
+                            padding: '24px',
+                            background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
+                            border: `1px solid ${C.accent}`,
+                            borderRadius: 12,
+                            color: 'white',
+                            fontSize: 20,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: `0 0 40px ${C.accentGlow}`,
+                            transition: 'all 0.3s',
+                            marginBottom: 16,
+                        }}>
+                            ▶ Start New Session
+                        </button>
+
+                        {sessions.length > 0 && (
+                            <button onClick={onViewHistory} style={{
+                                width: '100%',
+                                padding: '16px',
+                                background: 'transparent',
+                                border: `1px solid ${C.border}`,
+                                borderRadius: 12,
+                                color: C.muted,
+                                fontSize: 15,
+                                cursor: 'pointer',
+                                marginBottom: 16,
+                            }}>
+                                📜 View Full History ({sessions.length})
+                            </button>
+                        )}
+
+                        {sessions.length === 0 && (
+                            <div style={{
+                                marginTop: 32,
+                                padding: '20px',
+                                background: C.card,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: 12,
+                                textAlign: 'center',
+                                fontSize: 14,
+                                color: C.muted,
+                                lineHeight: 1.7,
+                                fontStyle: 'italic',
+                            }}>
+                                No sessions yet. Tap Start to track your first session! 🎉
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function StatCard({ label, value, icon }) {
+            return (
+                <div style={{
+                    background: C.card,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    padding: '16px 8px',
+                    textAlign: 'center',
+                }}>
+                    <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold }}>{value}</div>
+                    <div style={{ fontSize: '9px', color: C.muted, marginTop: 4, textTransform: 'uppercase' }}>{label}</div>
+                </div>
+            );
+        }
+
+        function NerdStat({ label, value, unit, icon }) {
+            return (
+                <div style={{
+                    background: C.card,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: '16px',
+                    textAlign: 'center',
+                }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
+                    <div style={{ fontSize: '12px', color: C.muted, marginBottom: 6, textTransform: 'uppercase', lineHeight: 1.2 }}>
+                        {label}
+                    </div>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: C.accent }}>
+                        {value}
+                    </div>
+                    {unit && <div style={{ fontSize: '11px', color: C.muted, marginTop: 4 }}>{unit}</div>}
+                </div>
+            );
+        }
+
+        // ── HISTORY VIEW ──
+        function HistoryView({ sessions, onHome }) {
+            const [selectedSession, setSelectedSession] = useState(null);
+
+            if (selectedSession) {
+                return (
+                    <div style={{
+                        minHeight: '100vh',
+                        background: C.bg,
+                        color: C.text,
+                        padding: '40px 24px 60px',
+                        maxWidth: 440,
+                        margin: '0 auto',
+                    }}>
+                        <button onClick={() => setSelectedSession(null)} style={{
+                            background: 'none',
+                            border: 'none',
+                            color: C.muted,
+                            fontSize: 14,
+                            cursor: 'pointer',
+                            marginBottom: 30,
+                        }}>
+                            ← Back to History
+                        </button>
+
+                        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+                            <div style={{ fontSize: 14, color: C.muted, marginBottom: 10 }}>
+                                {formatDate(selectedSession.date)} • {formatTime(selectedSession.date)}
+                            </div>
+                            <div style={{ fontSize: 60, fontWeight: 700, color: C.hot, marginBottom: 10 }}>
+                                {selectedSession.strokes}
+                            </div>
+                            <div style={{ fontSize: 16, color: C.muted }}>strokes</div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                            {[
+                                { label: 'Duration', val: formatDuration(selectedSession.duration) },
+                                { label: 'Avg Rate', val: `${selectedSession.spm}/min` },
+                                { label: 'Peak Rate', val: `${selectedSession.peakRate}/min` },
+                                { label: 'Rating', val: `${selectedSession.rating}/10` },
+                                { label: 'Partner', val: selectedSession.partner },
+                                { label: 'Location', val: selectedSession.location },
+                                ...(selectedSession.content ? [{ label: 'Content', val: selectedSession.content }] : []),
+                                ...(selectedSession.toys ? [{ label: 'Toys', val: selectedSession.toys }] : []),
+                                ...(selectedSession.age ? [{ label: 'Age', val: selectedSession.age }] : []),
+                                ...(selectedSession.partner !== 'Solo' ? [{ label: 'Attractiveness', val: `${selectedSession.attractiveness}/10` }] : []),
+                            ].map(({ label, val }) => (
+                                <div key={label} style={{
+                                    background: C.card,
+                                    border: `1px solid ${C.border}`,
+                                    borderRadius: 10,
+                                    padding: 12,
+                                }}>
+                                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 6, textTransform: 'uppercase' }}>
+                                        {label}
+                                    </div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{val}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {selectedSession.notes && (
+                            <div style={{
+                                background: C.card,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: 10,
+                                padding: 16,
+                                marginBottom: 20,
+                            }}>
+                                <div style={{ fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>
+                                    Notes
+                                </div>
+                                <div style={{ fontSize: 14, color: C.text, fontStyle: 'italic' }}>
+                                    {selectedSession.notes}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: C.bg,
+                    color: C.text,
+                    padding: '40px 24px 60px',
+                    maxWidth: 440,
+                    margin: '0 auto',
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+                        <button onClick={onHome} style={{
+                            background: 'none',
+                            border: 'none',
+                            color: C.muted,
+                            fontSize: 14,
+                            cursor: 'pointer',
+                        }}>
+                            ← Home
+                        </button>
+                        <div style={{ fontFamily: 'monospace', fontSize: 14, color: C.accent, textTransform: 'uppercase' }}>
+                            History
+                        </div>
+                    </div>
+
+                    {sessions.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: C.muted, fontStyle: 'italic', marginTop: 60 }}>
+                            No sessions recorded yet.
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {[...sessions].reverse().map((s, i) => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => setSelectedSession(s)}
+                                    style={{
+                                        background: C.card,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: 10,
+                                        padding: 16,
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        borderLeft: i === 0 ? `3px solid ${C.hot}` : `3px solid ${C.border}`,
+                                        transition: 'all 0.2s',
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = C.surface}
+                                    onMouseLeave={(e) => e.target.style.background = C.card}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                                        <div>
+                                            <div style={{ fontSize: 24, fontWeight: 700, color: i === 0 ? C.hot : C.accent }}>
+                                                {s.strokes} <span style={{ fontSize: 12, color: C.muted, fontWeight: 400 }}>strokes</span>
+                                            </div>
+                                            <div style={{ fontSize: 11, fontFamily: 'monospace', color: C.muted, marginTop: 2 }}>
+                                                {formatDate(s.date)} • {formatTime(s.date)}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>⭐ {s.rating}/10</div>
+                                            <div style={{ fontSize: 11, color: C.muted }}>{formatDuration(s.duration)}</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 11, background: 'rgba(74,158,255,0.1)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 20, padding: '3px 10px', color: C.accent }}>
+                                            {s.partner}
+                                        </span>
+                                        <span style={{ fontSize: 11, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: 20, padding: '3px 10px', color: C.muted }}>
+                                            {s.location}
+                                        </span>
+                                        {s.content && <span style={{ fontSize: 11, background: 'rgba(106,209,160,0.1)', border: '1px solid rgba(106,209,160,0.2)', borderRadius: 20, padding: '3px 10px', color: C.green }}>
+                                            🎬
+                                        </span>}
+                                        {s.toys && <span style={{ fontSize: 11, background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.2)', borderRadius: 20, padding: '3px 10px', color: C.gold }}>
+                                            🎁
+                                        </span>}
+                                        {i === 0 && <span style={{ fontSize: 11, background: 'rgba(255,107,107,0.15)', border: `1px solid rgba(255,107,107,0.3)`, borderRadius: 20, padding: '3px 10px', color: C.hot }}>
+                                            Latest
+                                        </span>}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── MAIN APP ──
+        function App() {
+            const [loggedIn, setLoggedIn] = useState(!!db.user);
+            const [view, setView] = useState('home');
+            const [sessions, setSessions] = useState(db.sessions || []);
+            const [currentSession, setCurrentSession] = useState(null);
+
+            function saveSession(sess) {
+                const updated = [sess, ...sessions];
+                setSessions(updated);
+                db.sessions = updated;
+                saveDB();
+            }
+
+            if (!loggedIn) {
+                return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+            }
+
+            if (view === 'session') {
+                return <SessionView
+                    onFinish={(sess) => {
+                        saveSession(sess);
+                        setCurrentSession(sess);
+                        setView('summary');
+                    }}
+                    onCancel={() => setView('home')}
+                />;
+            }
+
+            if (view === 'summary' && currentSession) {
+                return <SummaryView
+                    session={currentSession}
+                    onHome={() => setView('home')}
+                />;
+            }
+
+            if (view === 'history') {
+                return <HistoryView
+                    sessions={sessions}
+                    onHome={() => setView('home')}
+                />;
+            }
+
+            return <HomeView
+                sessions={sessions}
+                onStart={() => setView('session')}
+                onViewHistory={() => setView('history')}
+            />;
+        }
+
+        // Render
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
