@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // ── Weather API Integration ──
+        const WEATHER_API_KEY = 'demo'; // Using Open-Meteo (free, no key needed)
+        const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast';
+        const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1/search';
+
+        // Weather icon mapping
+        const WEATHER_ICONS = {
+            0: '☀️',     // Clear sky
+            1: '🌤️',     // Mainly clear
+            2: '⛅',     // Partly cloudy
+            3: '☁️',     // Overcast
+            45: '🌫️',    // Foggy
+            48: '🌫️',    // Depositing rime fog
+            51: '🌧️',    // Light drizzle
+            53: '🌧️',    // Moderate drizzle
+            55: '🌧️',    // Dense drizzle
+            61: '🌧️',    // Slight rain
+            63: '🌧️',    // Moderate rain
+            65: '⛈️',    // Heavy rain
+            71: '❄️',    // Slight snow
+            73: '❄️',    // Moderate snow
+            75: '❄️',    // Heavy snow
+            77: '❄️',    // Snow grains
+            80: '🌧️',    // Slight rain showers
+            81: '🌧️',    // Moderate rain showers
+            82: '⛈️',    // Violent rain showers
+            85: '❄️',    // Slight snow showers
+            86: '❄️',    // Heavy snow showers
+            95: '⛈️',    // Thunderstorm
+            96: '⛈️',    // Thunderstorm with slight hail
+            99: '⛈️',    // Thunderstorm with heavy hail
+        };
+
+        const WEATHER_DESCRIPTIONS = {
+            0: 'Clear sky',
+            1: 'Mainly clear',
+            2: 'Partly cloudy',
+            3: 'Overcast',
+            45: 'Foggy',
+            48: 'Depositing rime fog',
+            51: 'Light drizzle',
+            53: 'Moderate drizzle',
+            55: 'Dense drizzle',
+            61: 'Slight rain',
+            63: 'Moderate rain',
+            65: 'Heavy rain',
+            71: 'Slight snow',
+            73: 'Moderate snow',
+            75: 'Heavy snow',
+            77: 'Snow grains',
+            80: 'Rain showers',
+            81: 'Moderate rain showers',
+            82: 'Violent rain showers',
+            85: 'Slight snow showers',
+            86: 'Heavy snow showers',
+            95: 'Thunderstorm',
+            96: 'Thunderstorm with hail',
+            99: 'Thunderstorm with heavy hail',
+        };
+
+        // Fetch weather data
+        async function fetchWeather(lat, lon) {
+            try {
+                const params = new URLSearchParams({
+                    latitude: lat,
+                    longitude: lon,
+                    current: 'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,weather_code',
+                    hourly: 'temperature_2m,weather_code',
+                    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max',
+                    timezone: 'auto',
+                });
+                const response = await fetch(`${WEATHER_API_URL}?${params}`);
+                if (!response.ok) throw new Error('Weather API error');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching weather:', error);
+                return null;
+            }
+        }
+
+        // Geocode city name to coordinates
+        async function geocodeCity(cityName) {
+            try {
+                const params = new URLSearchParams({
+                    name: cityName,
+                    count: 1,
+                    language: 'en',
+                    format: 'json',
+                });
+                const response = await fetch(`${GEOCODING_API_URL}?${params}`);
+                if (!response.ok) throw new Error('Geocoding API error');
+                const data = await response.json();
+                if (data.results && data.results.length > 0) {
+                    const result = data.results[0];
+                    return {
+                        lat: result.latitude,
+                        lon: result.longitude,
+                        name: result.name,
+                        country: result.country,
+                    };
+                }
+                return null;
+            } catch (error) {
+                console.error('Error geocoding:', error);
+                return null;
+            }
+        }
+
+        // ── Main Dashboard Component ──
+        function WeatherDashboard() {
+            const [city, setCity] = useState('New York');
+            const [searchInput, setSearchInput] = useState('');
+            const [weather, setWeather] = useState(null);
+            const [location, setLocation] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [useGeolocation, setUseGeolocation] = useState(false);
+
+            // Load weather on mount and when city changes
+            useEffect(() => {
+                loadWeather();
+            }, [city]);
+
+            async function loadWeather() {
+                setLoading(true);
+                setError('');
+                const coords = await geocodeCity(city);
+                if (coords) {
+                    setLocation(coords);
+                    const weatherData = await fetchWeather(coords.lat, coords.lon);
+                    if (weatherData) {
+                        setWeather(weatherData);
+                    } else {
+                        setError('Failed to fetch weather data');
+                    }
+                } else {
+                    setError('City not found');
+                }
+                setLoading(false);
+            }
+
+            function handleSearch(e) {
+                e.preventDefault();
+                if (searchInput.trim()) {
+                    setCity(searchInput);
+                    setSearchInput('');
+                }
+            }
+
+            function getGeolocation() {
+                if (navigator.geolocation) {
+                    setLoading(true);
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const { latitude, longitude } = position.coords;
+                            const weatherData = await fetchWeather(latitude, longitude);
+                            if (weatherData) {
+                                setWeather(weatherData);
+                                setLocation({ lat: latitude, lon: longitude, name: 'Your Location', country: '' });
+                                setUseGeolocation(true);
+                            }
+                            setLoading(false);
+                        },
+                        () => {
+                            setError('Could not get your location');
+                            setLoading(false);
+                        }
+                    );
+                }
+            }
+
+            return (
+                <div style={{
+                    maxWidth: '1200px',
+                    margin: '0 auto',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    borderRadius: '20px',
+                    padding: '40px',
+                    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                }}>
+                    {/* Header */}
+                    <div style={{ marginBottom: '40px' }}>
+                        <h1 style={{ fontSize: '48px', fontWeight: 700, marginBottom: '10px', color: '#333' }}>
+                            ⛅ Weather Dashboard
+                        </h1>
+                        <p style={{ fontSize: '16px', color: '#888' }}>
+                            Real-time weather powered by Open-Meteo API
+                        </p>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '40px', flexWrap: 'wrap' }}>
+                        <form onSubmit={handleSearch} style={{ flex: 1, minWidth: '250px', display: 'flex', gap: '10px' }}>
+                            <input
+                                type="text"
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                placeholder="Search for a city..."
+                                style={{
+                                    flex: 1,
+                                    padding: '12px 16px',
+                                    fontSize: '16px',
+                                    border: '2px solid #ddd',
+                                    borderRadius: '10px',
+                                    outline: 'none',
+                                    transition: 'border-color 0.3s',
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                                onBlur={(e) => e.target.style.borderColor = '#ddd'}
+                            />
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: '#667eea',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '10px',
+                                    cursor: loading ? 'not-allowed' : 'pointer',
+                                    fontSize: '16px',
+                                    fontWeight: 600,
+                                    opacity: loading ? 0.6 : 1,
+                                }}
+                            >
+                                {loading ? '⏳' : '🔍'}
+                            </button>
+                        </form>
+                        <button
+                            onClick={getGeolocation}
+                            disabled={loading}
+                            style={{
+                                padding: '12px 24px',
+                                background: '#764ba2',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '10px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                fontSize: '16px',
+                                fontWeight: 600,
+                                opacity: loading ? 0.6 : 1,
+                            }}
+                            title="Use your device's location"
+                        >
+                            📍
+                        </button>
+                    </div>
+
+                    {/* Error Message */}
+                    {error && (
+                        <div style={{
+                            padding: '16px',
+                            background: '#fee',
+                            border: '1px solid #fcc',
+                            borderRadius: '10px',
+                            color: '#c33',
+                            marginBottom: '20px',
+                        }}>
+                            ⚠️ {error}
+                        </div>
+                    )}
+
+                    {/* Loading State */}
+                    {loading && (
+                        <div style={{
+                            padding: '40px',
+                            textAlign: 'center',
+                            color: '#999',
+                            fontSize: '18px',
+                        }}>
+                            ⏳ Loading weather data...
+                        </div>
+                    )}
+
+                    {/* Weather Display */}
+                    {weather && location && !loading && (
+                        <>
+                            {/* Current Weather */}
+                            <div style={{
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                borderRadius: '20px',
+                                padding: '40px',
+                                color: 'white',
+                                marginBottom: '40px',
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                                    <div>
+                                        <h2 style={{ fontSize: '32px', fontWeight: 700, marginBottom: '5px' }}>
+                                            {location.name}
+                                        </h2>
+                                        <p style={{ fontSize: '16px', opacity: 0.9 }}>
+                                            {location.country}
+                                        </p>
+                                    </div>
+                                    <div style={{ fontSize: '64px' }}>
+                                        {WEATHER_ICONS[weather.current.weather_code] || '🌤️'}
+                                    </div>
+                                </div>
+
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                                    gap: '20px',
+                                    marginTop: '30px',
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>Temperature</div>
+                                        <div style={{ fontSize: '36px', fontWeight: 700 }}>
+                                            {Math.round(weather.current.temperature_2m)}°C
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>Condition</div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>
+                                            {WEATHER_DESCRIPTIONS[weather.current.weather_code] || 'Unknown'}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>Humidity</div>
+                                        <div style={{ fontSize: '36px', fontWeight: 700 }}>
+                                            {weather.current.relative_humidity_2m}%
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>Wind Speed</div>
+                                        <div style={{ fontSize: '36px', fontWeight: 700 }}>
+                                            {Math.round(weather.current.wind_speed_10m)} km/h
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Hourly Forecast */}
+                            <div style={{ marginBottom: '40px' }}>
+                                <h3 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px', color: '#333' }}>
+                                    📅 24-Hour Forecast
+                                </h3>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
+                                    gap: '10px',
+                                }}>
+                                    {weather.hourly.time.slice(0, 24).map((time, index) => {
+                                        const hour = new Date(time).getHours();
+                                        const temp = weather.hourly.temperature_2m[index];
+                                        const code = weather.hourly.weather_code[index];
+                                        return (
+                                            <div
+                                                key={index}
+                                                style={{
+                                                    background: '#f5f5f5',
+                                                    borderRadius: '12px',
+                                                    padding: '15px',
+                                                    textAlign: 'center',
+                                                    border: '1px solid #eee',
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px', fontWeight: 600 }}>
+                                                    {hour}:00
+                                                </div>
+                                                <div style={{ fontSize: '24px', marginBottom: '8px' }}>
+                                                    {WEATHER_ICONS[code] || '🌤️'}
+                                                </div>
+                                                <div style={{ fontSize: '16px', fontWeight: 700, color: '#333' }}>
+                                                    {Math.round(temp)}°C
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 7-Day Forecast */}
+                            <div>
+                                <h3 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px', color: '#333' }}>
+                                    📊 7-Day Forecast
+                                </h3>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                                    gap: '15px',
+                                }}>
+                                    {weather.daily.time.map((time, index) => {
+                                        const date = new Date(time);
+                                        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                                        const max = weather.daily.temperature_2m_max[index];
+                                        const min = weather.daily.temperature_2m_min[index];
+                                        const code = weather.daily.weather_code[index];
+                                        const precip = weather.daily.precipitation_sum[index];
+                                        const windSpeed = weather.daily.wind_speed_10m_max[index];
+
+                                        return (
+                                            <div
+                                                key={index}
+                                                style={{
+                                                    background: '#f9f9f9',
+                                                    border: '1px solid #ddd',
+                                                    borderRadius: '12px',
+                                                    padding: '20px',
+                                                    textAlign: 'center',
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#333', marginBottom: '10px' }}>
+                                                    {dayName}
+                                                </div>
+                                                <div style={{ fontSize: '32px', marginBottom: '10px' }}>
+                                                    {WEATHER_ICONS[code] || '🌤️'}
+                                                </div>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-around',
+                                                    marginBottom: '10px',
+                                                    fontSize: '14px',
+                                                }}>
+                                                    <div>
+                                                        <div style={{ color: '#888', fontSize: '12px' }}>High</div>
+                                                        <div style={{ fontWeight: 700, color: '#ff6b6b' }}>{Math.round(max)}°C</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: '#888', fontSize: '12px' }}>Low</div>
+                                                        <div style={{ fontWeight: 700, color: '#4a90e2' }}>{Math.round(min)}°C</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '12px',
+                                                    color: '#666',
+                                                    paddingTop: '10px',
+                                                    borderTop: '1px solid #eee',
+                                                }}>
+                                                    💧 {precip}mm | 💨 {Math.round(windSpeed)} km/h
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Footer Info */}
+                            <div style={{
+                                marginTop: '40px',
+                                paddingTop: '20px',
+                                borderTop: '1px solid #ddd',
+                                fontSize: '12px',
+                                color: '#999',
+                                textAlign: 'center',
+                            }}>
+                                Weather data provided by Open-Meteo • Last updated: {new Date().toLocaleTimeString()}
+                            </div>
+                        </>
+                    )}
+
+                    {/* Empty State */}
+                    {!weather && !loading && (
+                        <div style={{
+                            padding: '60px 20px',
+                            textAlign: 'center',
+                            color: '#999',
+                        }}>
+                            <div style={{ fontSize: '48px', marginBottom: '20px' }}>🌍</div>
+                            <p style={{ fontSize: '18px', marginBottom: '10px' }}>Search for a city to get started</p>
+                            <p style={{ fontSize: '14px', color: '#bbb' }}>or use your device's location</p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Render app
+        ReactDOM.render(<WeatherDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
