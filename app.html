@@ -15,7 +15,7 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            background: #0a0a0f;
+            background: #0a0a0a;
             color: #e8eaf0;
             min-height: 100vh;
         }
@@ -24,6 +24,11 @@
             margin: 0 auto;
             padding: 20px;
         }
+        /* Neon glow effect */
+        @keyframes neonGlow {
+            0%, 100% { text-shadow: 0 0 10px rgba(255, 140, 0, 0.5), 0 0 20px rgba(255, 140, 0, 0.3); }
+            50% { text-shadow: 0 0 20px rgba(255, 140, 0, 0.8), 0 0 40px rgba(255, 140, 0, 0.5); }
+        }
     </style>
 </head>
 <body>
@@ -31,27 +36,31 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // ── Colors ──
+        // ── Colors: Dark with Bright Orange Neon ──
         const C = {
-            bg: '#0a0a0f',
-            surface: '#12121a',
-            card: '#1a1a26',
-            border: 'rgba(99,180,255,0.15)',
-            accent: '#4a9eff',
-            accentGlow: 'rgba(74,158,255,0.3)',
+            bg: '#0a0a0a',           // Pure black
+            surface: '#0f0f12',       // Very dark gray
+            card: '#15151b',          // Slightly lighter for cards
+            border: 'rgba(255, 140, 0, 0.2)',  // Subtle orange border
+            accent: '#ff8c00',        // Bright orange (main neon)
+            accentGlow: 'rgba(255, 140, 0, 0.4)',  // Orange glow
             hot: '#ff6b6b',
-            hotGlow: 'rgba(255,107,107,0.3)',
-            gold: '#ffd166',
+            hotGlow: 'rgba(255, 107, 107, 0.3)',
+            gold: '#ffd700',
             green: '#06d6a0',
             text: '#e8eaf0',
-            muted: 'rgba(232,234,240,0.4)',
-            dim: 'rgba(232,234,240,0.2)',
+            muted: 'rgba(232, 234, 240, 0.4)',
+            dim: 'rgba(232, 234, 240, 0.2)',
+            neon: '#ff8c00',          // Primary neon orange
+            neonGlow: 'rgba(255, 140, 0, 0.6)',
         };
 
         // ── Storage ──
         let db = {
             user: null,
             sessions: [],
+            customWords: [],
+            wordCounts: {},
         };
 
         function loadDB() {
@@ -161,20 +170,20 @@
                 }}>
                     <div style={{
                         background: C.card,
-                        border: `1px solid ${C.border}`,
+                        border: `2px solid ${C.neon}`,
                         borderRadius: '16px',
                         padding: '40px',
                         maxWidth: '400px',
                         width: '100%',
-                        boxShadow: `0 0 60px ${C.accentGlow}`,
+                        boxShadow: `0 0 60px ${C.neonGlow}`,
                     }}>
                         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
                             <div style={{ fontSize: '64px', marginBottom: '20px' }}>🍆</div>
                             <h1 style={{
                                 fontSize: '32px',
                                 fontWeight: 700,
-                                color: C.accent,
-                                textShadow: `0 0 20px ${C.accentGlow}`,
+                                color: C.neon,
+                                textShadow: `0 0 20px ${C.neonGlow}`,
                                 marginBottom: '10px',
                             }}>
                                 JackTracker
@@ -239,7 +248,7 @@
                                     fontSize: '13px',
                                     marginBottom: '20px',
                                 }}>
-                                    ⚠️ {error}
+                                    ⚠�� {error}
                                 </div>
                             )}
 
@@ -248,14 +257,14 @@
                                 style={{
                                     width: '100%',
                                     padding: '14px',
-                                    background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
-                                    border: `1px solid ${C.accent}`,
+                                    background: `linear-gradient(135deg, #4a3000, ${C.neon})`,
+                                    border: `1px solid ${C.neon}`,
                                     borderRadius: '8px',
                                     color: 'white',
                                     fontSize: '16px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
-                                    boxShadow: `0 0 20px ${C.accentGlow}`,
+                                    boxShadow: `0 0 20px ${C.neonGlow}`,
                                 }}
                             >
                                 Login
@@ -275,12 +284,159 @@
             );
         }
 
+        // ── SETTINGS VIEW ──
+        function SettingsView({ onBack }) {
+            const [customWords, setCustomWords] = useState(db.customWords);
+            const [newWord, setNewWord] = useState('');
+
+            function addWord() {
+                if (!newWord.trim()) return;
+                const word = newWord.trim();
+                if (!customWords.includes(word)) {
+                    setCustomWords([...customWords, word]);
+                    db.customWords = [...customWords, word];
+                    if (!db.wordCounts[word]) db.wordCounts[word] = 0;
+                    saveDB();
+                    setNewWord('');
+                }
+            }
+
+            function removeWord(word) {
+                const updated = customWords.filter(w => w !== word);
+                setCustomWords(updated);
+                db.customWords = updated;
+                saveDB();
+            }
+
+            return (
+                <div style={{
+                    minHeight: '100vh',
+                    background: C.bg,
+                    color: C.text,
+                    padding: '24px',
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                        <h1 style={{ fontSize: '32px', color: C.neon, textShadow: `0 0 20px ${C.neonGlow}` }}>⚙️ Settings</h1>
+                        <button onClick={onBack} style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: C.muted,
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                        }}>
+                            ← Back
+                        </button>
+                    </div>
+
+                    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                        {/* Custom Words Section */}
+                        <div style={{
+                            background: C.card,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: '12px',
+                            padding: '24px',
+                            marginBottom: '20px',
+                        }}>
+                            <h2 style={{ fontSize: '18px', color: C.neon, marginBottom: '20px' }}>📝 Custom Words</h2>
+                            <p style={{ color: C.muted, fontSize: '12px', marginBottom: '16px' }}>
+                                Add up to 5 words to track during sessions. These will appear on your dashboard for live counting.
+                            </p>
+
+                            {/* Add Word */}
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                                <input
+                                    type="text"
+                                    value={newWord}
+                                    onChange={(e) => setNewWord(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addWord()}
+                                    placeholder="Enter a word..."
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: C.surface,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '8px',
+                                        color: C.text,
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                    }}
+                                />
+                                <button 
+                                    onClick={addWord}
+                                    disabled={customWords.length >= 5}
+                                    style={{
+                                        padding: '12px 24px',
+                                        background: customWords.length >= 5 ? 'rgba(255, 140, 0, 0.2)' : `linear-gradient(135deg, #4a3000, ${C.neon})`,
+                                        border: `1px solid ${C.neon}`,
+                                        borderRadius: '8px',
+                                        color: 'white',
+                                        cursor: customWords.length >= 5 ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Add
+                                </button>
+                            </div>
+
+                            {/* Word Tags */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {customWords.map((word) => (
+                                    <div 
+                                        key={word}
+                                        style={{
+                                            background: `rgba(255, 140, 0, 0.15)`,
+                                            border: `1px solid ${C.neon}`,
+                                            borderRadius: '20px',
+                                            padding: '8px 16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            color: C.neon,
+                                        }}
+                                    >
+                                        <span>{word}</span>
+                                        <button 
+                                            onClick={() => removeWord(word)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: C.neon,
+                                                cursor: 'pointer',
+                                                fontSize: '16px',
+                                            }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {customWords.length === 0 && (
+                                <div style={{
+                                    padding: '16px',
+                                    background: `rgba(255, 140, 0, 0.05)`,
+                                    border: `1px dashed ${C.border}`,
+                                    borderRadius: '8px',
+                                    textAlign: 'center',
+                                    color: C.muted,
+                                    fontSize: '12px',
+                                }}>
+                                    No custom words yet. Add some to get started!
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         // ── SESSION VIEW ──
         function SessionView({ onFinish, onCancel }) {
             const [strokes, setStrokes] = useState(0);
             const [running, setRunning] = useState(false);
             const [elapsed, setElapsed] = useState(0);
             const [peakRate, setPeakRate] = useState(0);
+            const [wordCounts, setWordCounts] = useState(db.customWords.reduce((a, w) => ({ ...a, [w]: 0 }), {}));
             
             // Session metadata
             const [partner, setPartner] = useState('Solo');
@@ -308,7 +464,7 @@
                 return () => clearInterval(timerRef.current);
             }, [running]);
 
-            // Motion detection - improved to detect movement in all directions
+            // Motion detection
             useEffect(() => {
                 if (!running) return;
 
@@ -320,18 +476,14 @@
                     const y = acc.y || 0;
                     const z = acc.z || 0;
                     
-                    // Calculate total acceleration change (magnitude of motion vector)
                     const deltaX = Math.abs(x - lastAccel.current.x);
                     const deltaY = Math.abs(y - lastAccel.current.y);
                     const deltaZ = Math.abs(z - lastAccel.current.z);
                     
-                    // Total motion is the sum of changes across all axes
                     const totalDelta = deltaX + deltaY + deltaZ;
                     
                     lastAccel.current = { x, y, z };
 
-                    // Lower threshold (4.5 instead of 6) for better sensitivity
-                    // Using combined axis detection for more reliable stroke counting
                     if (totalDelta > 4.5 && !strokeCooldown.current) {
                         strokeCooldown.current = true;
                         setStrokes(s => {
@@ -342,7 +494,6 @@
                             setPeakRate(p => Math.max(p, Math.round(spm)));
                             return next;
                         });
-                        // Reduced cooldown from 200ms to 100ms for faster detection
                         setTimeout(() => { strokeCooldown.current = false; }, 100);
                     }
                 }
@@ -354,6 +505,10 @@
             function manualStroke() {
                 if (!running) return;
                 setStrokes(s => s + 1);
+            }
+
+            function incrementWord(word) {
+                setWordCounts(wc => ({ ...wc, [word]: (wc[word] || 0) + 1 }));
             }
 
             function handleStart() {
@@ -369,6 +524,13 @@
             function handleFinish() {
                 setRunning(false);
                 const spm = elapsed > 0 ? Math.round((strokes / elapsed) * 60) : 0;
+                
+                // Update word counts in db
+                Object.keys(wordCounts).forEach(word => {
+                    db.wordCounts[word] = (db.wordCounts[word] || 0) + wordCounts[word];
+                });
+                saveDB();
+
                 onFinish({
                     id: Date.now(),
                     date: new Date().toISOString(),
@@ -384,6 +546,7 @@
                     rating,
                     attractiveness,
                     notes,
+                    wordCounts,
                 });
             }
 
@@ -409,7 +572,7 @@
                         }}>
                             ← Cancel
                         </button>
-                        <div style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700 }}>
+                        <div style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, color: C.neon }}>
                             {formatDuration(elapsed)}
                         </div>
                     </div>
@@ -422,8 +585,8 @@
                         <div style={{
                             fontSize: 'clamp(80px,22vw,120px)',
                             fontWeight: 700,
-                            color: running ? C.hot : C.accent,
-                            textShadow: `0 0 60px ${running ? C.hotGlow : C.accentGlow}`,
+                            color: running ? C.neon : C.neon,
+                            textShadow: `0 0 60px ${C.neonGlow}`,
                         }}>
                             {strokes}
                         </div>
@@ -435,7 +598,7 @@
                     {/* Progress */}
                     <div style={{
                         height: '6px',
-                        background: 'rgba(255,255,255,0.05)',
+                        background: 'rgba(255, 140, 0, 0.1)',
                         borderRadius: '3px',
                         marginBottom: '32px',
                         overflow: 'hidden',
@@ -443,9 +606,10 @@
                         <div style={{
                             height: '100%',
                             width: `${progress}%`,
-                            background: `linear-gradient(90deg, ${C.accent}, ${C.hot})`,
+                            background: `linear-gradient(90deg, ${C.neon}, ${C.hot})`,
                             borderRadius: '3px',
                             transition: 'width 0.3s',
+                            boxShadow: `0 0 10px ${C.neonGlow}`,
                         }} />
                     </div>
 
@@ -463,13 +627,49 @@
                                 padding: '12px 8px',
                                 textAlign: 'center',
                             }}>
-                                <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold }}>{val}</div>
+                                <div style={{ fontSize: '18px', fontWeight: 700, color: C.neon }}>{val}</div>
                                 <div style={{ fontSize: '9px', color: C.muted, marginTop: '3px', textTransform: 'uppercase' }}>
                                     {label}
                                 </div>
                             </div>
                         ))}
                     </div>
+
+                    {/* Custom Word Counters */}
+                    {db.customWords.length > 0 && (
+                        <div style={{
+                            background: C.card,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: '8px',
+                            padding: '16px',
+                            marginBottom: '20px',
+                        }}>
+                            <div style={{ fontSize: '12px', color: C.muted, marginBottom: '12px', textTransform: 'uppercase' }}>
+                                📊 Word Tracking
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '8px' }}>
+                                {db.customWords.map(word => (
+                                    <button 
+                                        key={word}
+                                        onClick={() => incrementWord(word)}
+                                        style={{
+                                            background: `rgba(255, 140, 0, 0.1)`,
+                                            border: `2px solid ${C.neon}`,
+                                            borderRadius: '8px',
+                                            padding: '12px 8px',
+                                            color: C.neon,
+                                            cursor: 'pointer',
+                                            textAlign: 'center',
+                                            transition: 'all 0.2s',
+                                        }}
+                                    >
+                                        <div style={{ fontSize: '14px', fontWeight: 700 }}>{wordCounts[word] || 0}</div>
+                                        <div style={{ fontSize: '11px', marginTop: '4px', color: C.muted }}>{word}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Details Toggle */}
                     <button onClick={() => setShowDetails(!showDetails)} style={{
@@ -497,8 +697,8 @@
                                     {['Solo', 'Partner', 'Group'].map(p => (
                                         <button key={p} onClick={() => setPartner(p)} style={{
                                             padding: '6px 12px',
-                                            background: partner === p ? C.accent : 'transparent',
-                                            border: `1px solid ${partner === p ? C.accent : C.border}`,
+                                            background: partner === p ? C.neon : 'transparent',
+                                            border: `1px solid ${partner === p ? C.neon : C.border}`,
                                             borderRadius: '20px',
                                             color: partner === p ? '#000' : C.muted,
                                             fontSize: '12px',
@@ -668,14 +868,14 @@
                             <button onClick={handleStart} style={{
                                 width: '100%',
                                 padding: '20px',
-                                background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
-                                border: `1px solid ${C.accent}`,
+                                background: `linear-gradient(135deg, #4a3000, ${C.neon})`,
+                                border: `1px solid ${C.neon}`,
                                 borderRadius: '12px',
                                 color: 'white',
                                 fontSize: '18px',
                                 fontWeight: 700,
                                 cursor: 'pointer',
-                                boxShadow: `0 0 30px ${C.accentGlow}`,
+                                boxShadow: `0 0 30px ${C.neonGlow}`,
                             }}>
                                 {elapsed > 0 ? '▶ Resume' : '▶ Start Tracking'}
                             </button>
@@ -712,10 +912,10 @@
                             <button onClick={() => setRunning(false)} style={{
                                 width: '100%',
                                 padding: '20px',
-                                background: 'rgba(255,166,0,0.15)',
-                                border: '1px solid rgba(255,166,0,0.4)',
+                                background: 'rgba(255, 140, 0, 0.15)',
+                                border: `1px solid ${C.neon}`,
                                 borderRadius: '12px',
-                                color: '#ffa600',
+                                color: C.neon,
                                 fontSize: '16px',
                                 fontWeight: 700,
                                 cursor: 'pointer',
@@ -755,7 +955,7 @@
 
         // ── SUMMARY VIEW ──
         function SummaryView({ session, onHome }) {
-            const { strokes, duration, spm, peakRate, partner, location, content, toys, age, rating, attractiveness, notes, date } = session;
+            const { strokes, duration, spm, peakRate, partner, location, content, toys, age, rating, attractiveness, notes, date, wordCounts } = session;
 
             return (
                 <div style={{
@@ -773,8 +973,8 @@
                         <div style={{
                             fontSize: 'clamp(60px,16vw,90px)',
                             fontWeight: 700,
-                            color: C.hot,
-                            textShadow: `0 0 50px ${C.hotGlow}`,
+                            color: C.neon,
+                            textShadow: `0 0 50px ${C.neonGlow}`,
                             lineHeight: 1,
                             marginBottom: '8px',
                         }}>
@@ -786,8 +986,8 @@
                     {/* Stats Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '28px' }}>
                         {[
-                            { label: 'Duration', val: formatDuration(duration), color: C.accent },
-                            { label: 'Avg Rate', val: `${spm}/min`, color: C.accent },
+                            { label: 'Duration', val: formatDuration(duration), color: C.neon },
+                            { label: 'Avg Rate', val: `${spm}/min`, color: C.neon },
                             { label: 'Peak Rate', val: `${peakRate}/min`, color: C.gold },
                             { label: 'Rating', val: `${rating}/10`, color: C.green },
                             { label: 'Partner Type', val: partner, color: C.text },
@@ -806,6 +1006,35 @@
                             </div>
                         ))}
                     </div>
+
+                    {/* Word Counts */}
+                    {wordCounts && Object.keys(wordCounts).some(w => wordCounts[w] > 0) && (
+                        <div style={{
+                            background: C.card,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: '10px',
+                            padding: '18px',
+                            marginBottom: '20px',
+                        }}>
+                            <div style={{ fontSize: '12px', color: C.muted, marginBottom: '12px', textTransform: 'uppercase' }}>
+                                📊 Words Used
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
+                                {Object.entries(wordCounts).filter(([w, c]) => c > 0).map(([word, count]) => (
+                                    <div key={word} style={{
+                                        background: `rgba(255, 140, 0, 0.1)`,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '8px',
+                                        padding: '12px',
+                                        textAlign: 'center',
+                                    }}>
+                                        <div style={{ fontSize: '18px', fontWeight: 700, color: C.neon }}>{count}</div>
+                                        <div style={{ fontSize: '11px', color: C.muted, marginTop: '4px' }}>{word}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Session Details */}
                     {(content || toys || (partner !== 'Solo' && attractiveness) || notes) && (
@@ -863,8 +1092,8 @@
                         <button onClick={onHome} style={{
                             width: '100%',
                             padding: '16px',
-                            background: `linear-gradient(135deg, #1a3a6a, ${C.accent})`,
-                            border: `1px solid ${C.accent}`,
+                            background: `linear-gradient(135deg, #4a3000, ${C.neon})`,
+                            border: `1px solid ${C.neon}`,
                             borderRadius: '12px',
                             color: 'white',
                             fontSize: '16px',
@@ -879,7 +1108,7 @@
         }
 
         // ── HOME/DASHBOARD ──
-        function HomeView({ sessions, onStart, onViewHistory, onRefresh }) {
+        function HomeView({ sessions, onStart, onViewHistory, onSettings, onRefresh }) {
             const stats = getCleverStats(sessions);
 
             return (
@@ -893,17 +1122,31 @@
                     <div style={{
                         padding: '48px 24px 0',
                         textAlign: 'center',
-                        background: `linear-gradient(135deg, rgba(74,158,255,0.1), rgba(118,75,162,0.1))`,
+                        background: `linear-gradient(135deg, rgba(255, 140, 0, 0.1), rgba(118, 75, 162, 0.05))`,
                         paddingBottom: '40px',
+                        borderBottom: `1px solid ${C.border}`,
                     }}>
-                        <div style={{ fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.4em', color: C.accent, textTransform: 'uppercase', marginBottom: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+                            <button onClick={onSettings} style={{
+                                background: `rgba(255, 140, 0, 0.1)`,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: '8px',
+                                padding: '8px 16px',
+                                color: C.neon,
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                            }}>
+                                ⚙️ Settings
+                            </button>
+                        </div>
+                        <div style={{ fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.4em', color: C.neon, textTransform: 'uppercase', marginBottom: 12 }}>
                             Sexual Wellness
                         </div>
                         <div style={{
                             fontSize: 'clamp(36px,10vw,64px)',
                             fontWeight: 700,
-                            color: C.accent,
-                            textShadow: `0 0 40px ${C.accentGlow}`,
+                            color: C.neon,
+                            textShadow: `0 0 40px ${C.neonGlow}`,
                             letterSpacing: '0.05em',
                             marginBottom: 6,
                         }}>
@@ -915,7 +1158,7 @@
 
                         {/* Main Stats */}
                         {sessions.length > 0 && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px', padding: '0 0' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px', padding: '0' }}>
                                 <StatCard label="Total Sessions" value={stats.totalSessions} icon="📊" />
                                 <StatCard label="Total Strokes" value={stats.totalStrokes} icon="🍆" />
                                 <StatCard label="Avg Strokes" value={stats.avgStrokes} icon="📈" />
@@ -928,8 +1171,8 @@
 
                     {/* Clever Stats Grid */}
                     {sessions.length > 0 && (
-                        <div style={{ padding: '0 24px', maxWidth: 800, margin: '0 auto', marginBottom: 40 }}>
-                            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: C.accent }}>📊 Your Stats</h3>
+                        <div style={{ padding: '0 24px', maxWidth: 800, margin: '0 auto', marginBottom: 40, marginTop: 40 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: C.neon }}>📊 Your Stats</h3>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
                                 <NerdStat label="Sessions Per Day (Max)" value={stats.sessionsPerDay} unit="times" icon="🔢" />
                                 <NerdStat label="Most Common Partner" value={stats.topPartner} icon="👥" />
@@ -941,19 +1184,40 @@
                         </div>
                     )}
 
+                    {/* Word Usage Log */}
+                    {Object.values(db.wordCounts).some(c => c > 0) && (
+                        <div style={{ padding: '0 24px', maxWidth: 800, margin: '0 auto', marginBottom: 40 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: C.neon }}>📝 Word Usage Log</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+                                {Object.entries(db.wordCounts).filter(([w, c]) => c > 0).sort((a, b) => b[1] - a[1]).map(([word, count]) => (
+                                    <div key={word} style={{
+                                        background: C.card,
+                                        border: `1px solid ${C.border}`,
+                                        borderRadius: '8px',
+                                        padding: '16px',
+                                        textAlign: 'center',
+                                    }}>
+                                        <div style={{ fontSize: '24px', fontWeight: 700, color: C.neon }}>{count}</div>
+                                        <div style={{ fontSize: '12px', color: C.muted, marginTop: '8px', textTransform: 'capitalize' }}>{word}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Buttons */}
                     <div style={{ padding: '0 24px', maxWidth: 400, margin: '0 auto' }}>
                         <button onClick={onStart} style={{
                             width: '100%',
                             padding: '24px',
-                            background: `linear-gradient(135deg, #1a4a8a, ${C.accent})`,
-                            border: `1px solid ${C.accent}`,
+                            background: `linear-gradient(135deg, #4a3000, ${C.neon})`,
+                            border: `1px solid ${C.neon}`,
                             borderRadius: 12,
                             color: 'white',
                             fontSize: 20,
                             fontWeight: 700,
                             cursor: 'pointer',
-                            boxShadow: `0 0 40px ${C.accentGlow}`,
+                            boxShadow: `0 0 40px ${C.neonGlow}`,
                             transition: 'all 0.3s',
                             marginBottom: 16,
                         }}>
@@ -1002,13 +1266,15 @@
                 <div style={{
                     background: C.card,
                     border: `1px solid ${C.border}`,
-                    borderRadius: 8,
+                    borderRadius: '10px',
                     padding: '16px 8px',
                     textAlign: 'center',
                 }}>
-                    <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold }}>{value}</div>
-                    <div style={{ fontSize: '9px', color: C.muted, marginTop: 4, textTransform: 'uppercase' }}>{label}</div>
+                    <div style={{ fontSize: '20px', marginBottom: '8px' }}>{icon}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: C.neon }}>{value}</div>
+                    <div style={{ fontSize: '9px', color: C.muted, marginTop: '8px', textTransform: 'uppercase' }}>
+                        {label}
+                    </div>
                 </div>
             );
         }
@@ -1018,71 +1284,86 @@
                 <div style={{
                     background: C.card,
                     border: `1px solid ${C.border}`,
-                    borderRadius: 8,
+                    borderRadius: '10px',
                     padding: '16px',
-                    textAlign: 'center',
                 }}>
-                    <div style={{ fontSize: 20, marginBottom: 6 }}>{icon}</div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold, marginBottom: 4 }}>{value}</div>
-                    {unit && <div style={{ fontSize: '9px', color: C.accent, textTransform: 'uppercase', marginBottom: 4 }}>{unit}</div>}
-                    <div style={{ fontSize: '10px', color: C.muted, lineHeight: 1.2 }}>{label}</div>
+                    <div style={{ fontSize: '12px', color: C.muted, marginBottom: '8px', textTransform: 'uppercase' }}>
+                        {label}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                        <div style={{ fontSize: '24px', fontWeight: 700, color: C.neon }}>{value}</div>
+                        <div style={{ fontSize: '16px' }}>{icon}</div>
+                    </div>
+                    {unit && <div style={{ fontSize: '11px', color: C.muted, marginTop: '4px' }}>{unit}</div>}
                 </div>
             );
         }
 
         // ── HISTORY VIEW ──
         function HistoryView({ sessions, onHome }) {
-            const sortedSessions = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
-
             return (
                 <div style={{
                     minHeight: '100vh',
                     background: C.bg,
                     color: C.text,
-                    padding: '32px 24px',
-                    maxWidth: '800px',
+                    padding: '40px 24px',
+                    maxWidth: '600px',
                     margin: '0 auto',
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>📜 History</h2>
-                        <button onClick={onHome} style={{
-                            background: 'none',
-                            border: 'none',
-                            color: C.muted,
-                            fontSize: '14px',
-                            cursor: 'pointer',
-                        }}>
-                            ✕ Close
-                        </button>
-                    </div>
+                    <button onClick={onHome} style={{
+                        marginBottom: '32px',
+                        background: 'none',
+                        border: 'none',
+                        color: C.neon,
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                    }}>
+                        ← Back to Dashboard
+                    </button>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {sortedSessions.map(session => (
-                            <div key={session.id} style={{
+                    <h1 style={{ fontSize: '32px', color: C.neon, marginBottom: '32px', textShadow: `0 0 20px ${C.neonGlow}` }}>
+                        📜 Session History
+                    </h1>
+
+                    {sessions.length === 0 && (
+                        <div style={{ textAlign: 'center', color: C.muted }}>
+                            No sessions yet.
+                        </div>
+                    )}
+
+                    <div style={{ display: 'grid', gap: '16px' }}>
+                        {[...sessions].reverse().map((s) => (
+                            <div key={s.id} style={{
                                 background: C.card,
                                 border: `1px solid ${C.border}`,
                                 borderRadius: '10px',
-                                padding: '16px',
+                                padding: '20px',
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                                     <div>
-                                        <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-                                            {formatDate(session.date)} at {formatTime(session.date)}
-                                        </div>
-                                        <div style={{ fontSize: 20, fontWeight: 700, color: C.hot }}>
-                                            {session.strokes} strokes
-                                        </div>
+                                        <div style={{ fontSize: '18px', fontWeight: 700, color: C.neon }}>{s.strokes}</div>
+                                        <div style={{ fontSize: '12px', color: C.muted }}>strokes</div>
                                     </div>
-                                    <div style={{ textAlign: 'right', fontSize: 14, color: C.gold, fontWeight: 700 }}>
-                                        {session.spm} SPM
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '12px', color: C.muted }}>{formatDate(s.date)}</div>
+                                        <div style={{ fontSize: '12px', color: C.muted }}>{formatTime(s.date)}</div>
                                     </div>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: 12, color: C.muted }}>
-                                    <div>Duration: {formatDuration(session.duration)}</div>
-                                    <div>Rating: {session.rating}/10</div>
-                                    <div>Partner: {session.partner}</div>
-                                    <div>Location: {session.location}</div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
+                                    <div><span style={{ color: C.muted }}>Duration:</span> <span style={{ color: C.neon }}>{formatDuration(s.duration)}</span></div>
+                                    <div><span style={{ color: C.muted }}>Rate:</span> <span style={{ color: C.neon }}>{s.spm}/min</span></div>
+                                    <div><span style={{ color: C.muted }}>Partner:</span> <span style={{ color: C.text }}>{s.partner}</span></div>
+                                    <div><span style={{ color: C.muted }}>Location:</span> <span style={{ color: C.text }}>{s.location}</span></div>
+                                    <div><span style={{ color: C.muted }}>Rating:</span> <span style={{ color: C.green }}>{s.rating}/10</span></div>
+                                    <div><span style={{ color: C.muted }}>Peak SPM:</span> <span style={{ color: C.neon }}>{s.peakRate}</span></div>
                                 </div>
+
+                                {s.notes && (
+                                    <div style={{ marginTop: '12px', fontSize: '12px', color: C.muted, fontStyle: 'italic' }}>
+                                        "{s.notes}"
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -1092,42 +1373,62 @@
 
         // ── MAIN APP ──
         function App() {
-            const [authenticated, setAuthenticated] = useState(!!db.user);
-            const [view, setView] = useState('home'); // 'home', 'session', 'summary', 'history'
-            const [sessions, setSessions] = useState(db.sessions || []);
+            const [loggedIn, setLoggedIn] = useState(!!db.user);
+            const [currentView, setCurrentView] = useState('home');
+            const [sessions, setSessions] = useState(db.sessions);
             const [currentSession, setCurrentSession] = useState(null);
 
-            function addSession(sessionData) {
-                const updated = [...sessions, sessionData];
-                setSessions(updated);
-                db.sessions = updated;
+            function handleSessionFinish(session) {
+                setSessions([...sessions, session]);
+                db.sessions = [...sessions, session];
                 saveDB();
-                setCurrentSession(sessionData);
-                setView('summary');
+                setCurrentSession(session);
+                setCurrentView('summary');
             }
 
             return (
-                <>
-                    {!authenticated ? (
-                        <LoginScreen onLogin={() => setAuthenticated(true)} />
-                    ) : view === 'session' ? (
-                        <SessionView
-                            onFinish={addSession}
-                            onCancel={() => setView('home')}
-                        />
-                    ) : view === 'summary' ? (
-                        <SummaryView session={currentSession} onHome={() => setView('home')} />
-                    ) : view === 'history' ? (
-                        <HistoryView sessions={sessions} onHome={() => setView('home')} />
-                    ) : (
-                        <HomeView
+                <div>
+                    {!loggedIn && <LoginScreen onLogin={() => setLoggedIn(true)} />}
+
+                    {loggedIn && currentView === 'home' && (
+                        <HomeView 
                             sessions={sessions}
-                            onStart={() => setView('session')}
-                            onViewHistory={() => setView('history')}
-                            onRefresh={() => setSessions([...sessions])}
+                            onStart={() => setCurrentView('session')}
+                            onViewHistory={() => setCurrentView('history')}
+                            onSettings={() => setCurrentView('settings')}
                         />
                     )}
-                </>
+
+                    {loggedIn && currentView === 'session' && (
+                        <SessionView 
+                            onFinish={handleSessionFinish}
+                            onCancel={() => setCurrentView('home')}
+                        />
+                    )}
+
+                    {loggedIn && currentView === 'summary' && currentSession && (
+                        <SummaryView 
+                            session={currentSession}
+                            onHome={() => { 
+                                setCurrentView('home');
+                                setCurrentSession(null);
+                            }}
+                        />
+                    )}
+
+                    {loggedIn && currentView === 'history' && (
+                        <HistoryView 
+                            sessions={sessions}
+                            onHome={() => setCurrentView('home')}
+                        />
+                    )}
+
+                    {loggedIn && currentView === 'settings' && (
+                        <SettingsView 
+                            onBack={() => setCurrentView('home')}
+                        />
+                    )}
+                </div>
             );
         }
 
