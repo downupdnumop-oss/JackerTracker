@@ -293,7 +293,7 @@
             const [notes, setNotes] = useState('');
             const [showDetails, setShowDetails] = useState(false);
 
-            const lastAccel = useRef({ y: 0 });
+            const lastAccel = useRef({ x: 0, y: 0, z: 0 });
             const strokeCooldown = useRef(false);
             const timerRef = useRef(null);
             const recentStrokes = useRef([]);
@@ -308,18 +308,31 @@
                 return () => clearInterval(timerRef.current);
             }, [running]);
 
-            // Motion detection
+            // Motion detection - improved to detect movement in all directions
             useEffect(() => {
                 if (!running) return;
 
                 function handleMotion(e) {
                     const acc = e.accelerationIncludingGravity;
                     if (!acc) return;
+                    
+                    const x = acc.x || 0;
                     const y = acc.y || 0;
-                    const delta = Math.abs(y - lastAccel.current.y);
-                    lastAccel.current.y = y;
+                    const z = acc.z || 0;
+                    
+                    // Calculate total acceleration change (magnitude of motion vector)
+                    const deltaX = Math.abs(x - lastAccel.current.x);
+                    const deltaY = Math.abs(y - lastAccel.current.y);
+                    const deltaZ = Math.abs(z - lastAccel.current.z);
+                    
+                    // Total motion is the sum of changes across all axes
+                    const totalDelta = deltaX + deltaY + deltaZ;
+                    
+                    lastAccel.current = { x, y, z };
 
-                    if (delta > 6 && !strokeCooldown.current) {
+                    // Lower threshold (4.5 instead of 6) for better sensitivity
+                    // Using combined axis detection for more reliable stroke counting
+                    if (totalDelta > 4.5 && !strokeCooldown.current) {
                         strokeCooldown.current = true;
                         setStrokes(s => {
                             const next = s + 1;
@@ -329,7 +342,8 @@
                             setPeakRate(p => Math.max(p, Math.round(spm)));
                             return next;
                         });
-                        setTimeout(() => { strokeCooldown.current = false; }, 200);
+                        // Reduced cooldown from 200ms to 100ms for faster detection
+                        setTimeout(() => { strokeCooldown.current = false; }, 100);
                     }
                 }
 
@@ -901,7 +915,7 @@
 
                         {/* Main Stats */}
                         {sessions.length > 0 && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px', padding: '0 24px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px', padding: '0 0' }}>
                                 <StatCard label="Total Sessions" value={stats.totalSessions} icon="📊" />
                                 <StatCard label="Total Strokes" value={stats.totalStrokes} icon="🍆" />
                                 <StatCard label="Avg Strokes" value={stats.avgStrokes} icon="📈" />
@@ -1004,241 +1018,119 @@
                 <div style={{
                     background: C.card,
                     border: `1px solid ${C.border}`,
-                    borderRadius: 10,
+                    borderRadius: 8,
                     padding: '16px',
                     textAlign: 'center',
                 }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-                    <div style={{ fontSize: '12px', color: C.muted, marginBottom: 6, textTransform: 'uppercase', lineHeight: 1.2 }}>
-                        {label}
-                    </div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: C.accent }}>
-                        {value}
-                    </div>
-                    {unit && <div style={{ fontSize: '11px', color: C.muted, marginTop: 4 }}>{unit}</div>}
+                    <div style={{ fontSize: 20, marginBottom: 6 }}>{icon}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: C.gold, marginBottom: 4 }}>{value}</div>
+                    {unit && <div style={{ fontSize: '9px', color: C.accent, textTransform: 'uppercase', marginBottom: 4 }}>{unit}</div>}
+                    <div style={{ fontSize: '10px', color: C.muted, lineHeight: 1.2 }}>{label}</div>
                 </div>
             );
         }
 
         // ── HISTORY VIEW ──
         function HistoryView({ sessions, onHome }) {
-            const [selectedSession, setSelectedSession] = useState(null);
-
-            if (selectedSession) {
-                return (
-                    <div style={{
-                        minHeight: '100vh',
-                        background: C.bg,
-                        color: C.text,
-                        padding: '40px 24px 60px',
-                        maxWidth: 440,
-                        margin: '0 auto',
-                    }}>
-                        <button onClick={() => setSelectedSession(null)} style={{
-                            background: 'none',
-                            border: 'none',
-                            color: C.muted,
-                            fontSize: 14,
-                            cursor: 'pointer',
-                            marginBottom: 30,
-                        }}>
-                            ← Back to History
-                        </button>
-
-                        <div style={{ textAlign: 'center', marginBottom: 30 }}>
-                            <div style={{ fontSize: 14, color: C.muted, marginBottom: 10 }}>
-                                {formatDate(selectedSession.date)} • {formatTime(selectedSession.date)}
-                            </div>
-                            <div style={{ fontSize: 60, fontWeight: 700, color: C.hot, marginBottom: 10 }}>
-                                {selectedSession.strokes}
-                            </div>
-                            <div style={{ fontSize: 16, color: C.muted }}>strokes</div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                            {[
-                                { label: 'Duration', val: formatDuration(selectedSession.duration) },
-                                { label: 'Avg Rate', val: `${selectedSession.spm}/min` },
-                                { label: 'Peak Rate', val: `${selectedSession.peakRate}/min` },
-                                { label: 'Rating', val: `${selectedSession.rating}/10` },
-                                { label: 'Partner', val: selectedSession.partner },
-                                { label: 'Location', val: selectedSession.location },
-                                ...(selectedSession.content ? [{ label: 'Content', val: selectedSession.content }] : []),
-                                ...(selectedSession.toys ? [{ label: 'Toys', val: selectedSession.toys }] : []),
-                                ...(selectedSession.age ? [{ label: 'Age', val: selectedSession.age }] : []),
-                                ...(selectedSession.partner !== 'Solo' ? [{ label: 'Attractiveness', val: `${selectedSession.attractiveness}/10` }] : []),
-                            ].map(({ label, val }) => (
-                                <div key={label} style={{
-                                    background: C.card,
-                                    border: `1px solid ${C.border}`,
-                                    borderRadius: 10,
-                                    padding: 12,
-                                }}>
-                                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 6, textTransform: 'uppercase' }}>
-                                        {label}
-                                    </div>
-                                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{val}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {selectedSession.notes && (
-                            <div style={{
-                                background: C.card,
-                                border: `1px solid ${C.border}`,
-                                borderRadius: 10,
-                                padding: 16,
-                                marginBottom: 20,
-                            }}>
-                                <div style={{ fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>
-                                    Notes
-                                </div>
-                                <div style={{ fontSize: 14, color: C.text, fontStyle: 'italic' }}>
-                                    {selectedSession.notes}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            }
+            const sortedSessions = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             return (
                 <div style={{
                     minHeight: '100vh',
                     background: C.bg,
                     color: C.text,
-                    padding: '40px 24px 60px',
-                    maxWidth: 440,
+                    padding: '32px 24px',
+                    maxWidth: '800px',
                     margin: '0 auto',
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>📜 History</h2>
                         <button onClick={onHome} style={{
                             background: 'none',
                             border: 'none',
                             color: C.muted,
-                            fontSize: 14,
+                            fontSize: '14px',
                             cursor: 'pointer',
                         }}>
-                            ← Home
+                            ✕ Close
                         </button>
-                        <div style={{ fontFamily: 'monospace', fontSize: 14, color: C.accent, textTransform: 'uppercase' }}>
-                            History
-                        </div>
                     </div>
 
-                    {sessions.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: C.muted, fontStyle: 'italic', marginTop: 60 }}>
-                            No sessions recorded yet.
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {[...sessions].reverse().map((s, i) => (
-                                <button
-                                    key={s.id}
-                                    onClick={() => setSelectedSession(s)}
-                                    style={{
-                                        background: C.card,
-                                        border: `1px solid ${C.border}`,
-                                        borderRadius: 10,
-                                        padding: 16,
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                        borderLeft: i === 0 ? `3px solid ${C.hot}` : `3px solid ${C.border}`,
-                                        transition: 'all 0.2s',
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.background = C.surface}
-                                    onMouseLeave={(e) => e.target.style.background = C.card}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                                        <div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, color: i === 0 ? C.hot : C.accent }}>
-                                                {s.strokes} <span style={{ fontSize: 12, color: C.muted, fontWeight: 400 }}>strokes</span>
-                                            </div>
-                                            <div style={{ fontSize: 11, fontFamily: 'monospace', color: C.muted, marginTop: 2 }}>
-                                                {formatDate(s.date)} • {formatTime(s.date)}
-                                            </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {sortedSessions.map(session => (
+                            <div key={session.id} style={{
+                                background: C.card,
+                                border: `1px solid ${C.border}`,
+                                borderRadius: '10px',
+                                padding: '16px',
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                                    <div>
+                                        <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                                            {formatDate(session.date)} at {formatTime(session.date)}
                                         </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>⭐ {s.rating}/10</div>
-                                            <div style={{ fontSize: 11, color: C.muted }}>{formatDuration(s.duration)}</div>
+                                        <div style={{ fontSize: 20, fontWeight: 700, color: C.hot }}>
+                                            {session.strokes} strokes
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                        <span style={{ fontSize: 11, background: 'rgba(74,158,255,0.1)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 20, padding: '3px 10px', color: C.accent }}>
-                                            {s.partner}
-                                        </span>
-                                        <span style={{ fontSize: 11, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: 20, padding: '3px 10px', color: C.muted }}>
-                                            {s.location}
-                                        </span>
-                                        {s.content && <span style={{ fontSize: 11, background: 'rgba(106,209,160,0.1)', border: '1px solid rgba(106,209,160,0.2)', borderRadius: 20, padding: '3px 10px', color: C.green }}>
-                                            🎬
-                                        </span>}
-                                        {s.toys && <span style={{ fontSize: 11, background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.2)', borderRadius: 20, padding: '3px 10px', color: C.gold }}>
-                                            🎁
-                                        </span>}
-                                        {i === 0 && <span style={{ fontSize: 11, background: 'rgba(255,107,107,0.15)', border: `1px solid rgba(255,107,107,0.3)`, borderRadius: 20, padding: '3px 10px', color: C.hot }}>
-                                            Latest
-                                        </span>}
+                                    <div style={{ textAlign: 'right', fontSize: 14, color: C.gold, fontWeight: 700 }}>
+                                        {session.spm} SPM
                                     </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: 12, color: C.muted }}>
+                                    <div>Duration: {formatDuration(session.duration)}</div>
+                                    <div>Rating: {session.rating}/10</div>
+                                    <div>Partner: {session.partner}</div>
+                                    <div>Location: {session.location}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             );
         }
 
         // ── MAIN APP ──
         function App() {
-            const [loggedIn, setLoggedIn] = useState(!!db.user);
-            const [view, setView] = useState('home');
+            const [authenticated, setAuthenticated] = useState(!!db.user);
+            const [view, setView] = useState('home'); // 'home', 'session', 'summary', 'history'
             const [sessions, setSessions] = useState(db.sessions || []);
             const [currentSession, setCurrentSession] = useState(null);
 
-            function saveSession(sess) {
-                const updated = [sess, ...sessions];
+            function addSession(sessionData) {
+                const updated = [...sessions, sessionData];
                 setSessions(updated);
                 db.sessions = updated;
                 saveDB();
+                setCurrentSession(sessionData);
+                setView('summary');
             }
 
-            if (!loggedIn) {
-                return <LoginScreen onLogin={() => setLoggedIn(true)} />;
-            }
-
-            if (view === 'session') {
-                return <SessionView
-                    onFinish={(sess) => {
-                        saveSession(sess);
-                        setCurrentSession(sess);
-                        setView('summary');
-                    }}
-                    onCancel={() => setView('home')}
-                />;
-            }
-
-            if (view === 'summary' && currentSession) {
-                return <SummaryView
-                    session={currentSession}
-                    onHome={() => setView('home')}
-                />;
-            }
-
-            if (view === 'history') {
-                return <HistoryView
-                    sessions={sessions}
-                    onHome={() => setView('home')}
-                />;
-            }
-
-            return <HomeView
-                sessions={sessions}
-                onStart={() => setView('session')}
-                onViewHistory={() => setView('history')}
-            />;
+            return (
+                <>
+                    {!authenticated ? (
+                        <LoginScreen onLogin={() => setAuthenticated(true)} />
+                    ) : view === 'session' ? (
+                        <SessionView
+                            onFinish={addSession}
+                            onCancel={() => setView('home')}
+                        />
+                    ) : view === 'summary' ? (
+                        <SummaryView session={currentSession} onHome={() => setView('home')} />
+                    ) : view === 'history' ? (
+                        <HistoryView sessions={sessions} onHome={() => setView('home')} />
+                    ) : (
+                        <HomeView
+                            sessions={sessions}
+                            onStart={() => setView('session')}
+                            onViewHistory={() => setView('history')}
+                            onRefresh={() => setSessions([...sessions])}
+                        />
+                    )}
+                </>
+            );
         }
 
-        // Render
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
